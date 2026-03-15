@@ -1,0 +1,24 @@
+{
+  "name": "tradingstars-analyzer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "express": "^4.18.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "5.0.1"
+  },
+  "scripts": {
+    "build": "react-scripts build",
+    "start": "node server.js",
+    "dev": "react-scripts start"
+  },
+  "browserslist": {
+    "production": [">0.2%", "not dead", "not op_mini all"],
+    "development": ["last 1 chrome version"]
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
