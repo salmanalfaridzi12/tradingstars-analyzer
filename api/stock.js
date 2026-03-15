@@ -36,14 +36,21 @@ async function fetchAlphaVantage(symbol, days, apiKey) {
   }
 
   const ts = json["Time Series (Daily)"];
+
+  // Alpha Vantage menyimpan saham IDX dalam satuan 1/100 IDR (sen)
+  // Perlu dikali 100 untuk mendapat harga IDR yang benar
+  // Contoh: BBCA close 96.45 di AV = 9645 IDR
+  const isIDX = symbol.includes(".JK") || symbol.includes(".JKT");
+  const multiplier = isIDX ? 100 : 1;
+
   return Object.entries(ts)
     .sort(([a], [b]) => new Date(a) - new Date(b))
     .map(([date, v]) => ({
       date,
-      open:   parseFloat(v["1. open"]),
-      high:   parseFloat(v["2. high"]),
-      low:    parseFloat(v["3. low"]),
-      close:  parseFloat(v["4. close"]),
+      open:   Math.round(parseFloat(v["1. open"])  * multiplier),
+      high:   Math.round(parseFloat(v["2. high"])  * multiplier),
+      low:    Math.round(parseFloat(v["3. low"])   * multiplier),
+      close:  Math.round(parseFloat(v["4. close"]) * multiplier),
       volume: parseInt(v["5. volume"]),
     }))
     .slice(-days);
