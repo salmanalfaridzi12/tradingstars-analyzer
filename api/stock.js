@@ -60,33 +60,57 @@ export default async function handler(req, res) {
   if (!cleanSymbol || cleanSymbol.length > 16) return res.status(400).json({ error: "Kode saham tidak valid" });
 
   const days = Math.min(Math.max(parseInt(daysParam) || 30, 5), 365);
-  const finalSymbol = cleanSymbol.includes(".") ? cleanSymbol : cleanSymbol + ".JK";
 
-  try {
-    const data = await fetchAlphaVantage(finalSymbol, days);
-    if (!data || data.length < 2) {
-      return res.status(404).json({ error: `Data tidak cukup untuk ${finalSymbol}.` });
+  // Alpha Vantage format untuk IDX: coba BBCA.JKT dulu, fallback ke BBCA.JK, lalu BBCA
+  const baseSymbol = cleanSymbol.replace(/\.JK$/, "").replace(/\.JKT$/, "");
+  const symbolsToTry = cleanSymbol.includes(".")
+    ? [cleanSymbol]
+    : [baseSymbol + ".JKT", baseSymbol + ".JK", baseSymbol];
+
+  let lastErr = null;
+  let successData = null;
+  let successSymbol = null;
+
+  for (const sym of symbolsToTry) {
+    try {
+      const data = await fetchAlphaVantage(sym, days);
+      if (data && data.length >= 2) {
+        successData = data;
+        successSymbol = sym;
+        break;
+      }
+    } catch (e) {
+      if (e.message === "SERVER_NO_KEY" || e.message === "RATE_LIMIT" || e.message === "DAILY_LIMIT") {
+        lastErr = e;
+        break; // jangan coba lagi kalau masalah key/limit
+      }
+      lastErr = e;
     }
+  }
 
-    res.setHeader("Cache-Control", "s-maxage=1200, stale-while-revalidate=120");
-    return res.status(200).json({ symbol: finalSymbol, source: "Alpha Vantage", points: data.length, data });
-
-  } catch (err) {
-    if (err.message === "SERVER_NO_KEY") {
+  if (!successData) {
+    const err = lastErr;
+    if (!err || err.message === "SERVER_NO_KEY") {
       return res.status(500).json({ error: "Server belum dikonfigurasi. Hubungi admin untuk setup API key." });
     }
     if (err.message === "RATE_LIMIT") {
       return res.status(429).json({ error: "Limit per menit tercapai. Tunggu 1 menit lalu coba lagi." });
     }
     if (err.message === "DAILY_LIMIT") {
-      return res.status(429).json({ error: "Limit harian (25/hari) habis. Coba lagi besok atau minta admin tambah API key." });
-    }
-    if (err.message === "NOT_FOUND") {
-      return res.status(404).json({ error: `${finalSymbol} tidak ditemukan. Pastikan kode emiten benar (contoh: BBCA, TLKM).` });
+      return res.status(429).json({ error: "Limit harian (25/hari) habis. Coba lagi besok." });
     }
     if (err.name === "TimeoutError") {
       return res.status(504).json({ error: "Timeout. Coba lagi." });
     }
+    return res.status(404).json({
+      error: `${baseSymbol} tidak ditemukan di Alpha Vantage. Pastikan kode emiten benar (contoh: BBCA, TLKM, BBRI).`
+    });
+  }
+
+  try {
+    res.setHeader("Cache-Control", "s-maxage=1200, stale-while-revalidate=120");
+    return res.status(200).json({ symbol: successSymbol, source: "Alpha Vantage", points: successData.length, data: successData });
+  } catch (err) {
     return res.status(500).json({ error: err.message });
   }
 }
